@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>E Learning Activation Mail</title>
+    <style>
+      /* Reset some default styles to ensure consistency */
+      body,
+      p,
+      h1,
+      h2,
+      h3,
+      ul,
+      ol,
+      li {
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f4f4f4;
+      }
+
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #ffffff;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+
+      h1 {
+        font-size: 28px;
+        margin-bottom: 20px;
+        color: #333;
+      }
+
+      p {
+        font-size: 18px;
+        line-height: 1.6;
+        margin-bottom: 10px;
+        color: #555;
+      }
+
+      .highlight {
+        font-weight: bold;
+        color: #007bff; /* Change the color to your preference */
+      }
+
+      /* Add more CSS styles as needed */
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Welcome to E Learning</h1>
+      <p>
+        Hello there,
+        <span class="highlight"><%= user.name %> </span>!
+      </p>
+      <p>
+        Thank you for registering with  ELearning. To activate your account, here is the activation
+        code:
+      </p>
+      <h2 class="highlight"><%= activationCode %></h2>
+      <p>Please enter your code within 5 minutes, or it will expire.</p>
+    </div>
+  </body>
+</html>
