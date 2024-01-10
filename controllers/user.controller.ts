@@ -7,8 +7,9 @@ import jwt, { JwtPayload, Secret } from "jsonwebtoken";
 import ejs from 'ejs';
 import path from 'path'
 import sendMail from "../utils/sendMail";
-import { sendToken } from "../utils/jwt";
+import { accessTokenOptions, refreshTokenOptions, sendToken } from "../utils/jwt";
 import {redis} from "../utils/redis"
+import { getUserById } from "../services/user.services";
 interface IRegistration {
     name: string,
     email: string,
@@ -72,8 +73,6 @@ export const createActivationToken = (user: any): IActivationToken => {
     }, process.env.ACTVATION_SECRET as Secret, {
         expiresIn: "5m"
     })
-    console.log(token, 'token');
-    console.log(activationCode, 'code');
 
     return { token, activationCode }
 }
@@ -124,13 +123,11 @@ interface ILoginRequest {
 export const loginUser = catchAsyncErrors(async ( req: Request,res: Response, next: NextFunction) => {
     try {
         const { email, password } = req.body as ILoginRequest;
-        // console.log(req.body.email, "is this the email")
 
         if (!email || !password) {
             return next(new ErrorHandler("Please enter your email and password", 400))
         }
         const user = await userModel.findOne({ email }).select("+password")
-        console.log(user, "this is the user")
         if (!user) {
             return next(new ErrorHandler("Invalid email or password", 400))
         }
@@ -145,7 +142,6 @@ export const loginUser = catchAsyncErrors(async ( req: Request,res: Response, ne
     } catch (error: any) {
         return next(new ErrorHandler(error.message, 400))
     }
-// console.log(req.body,)
 
 })
 
@@ -192,8 +188,49 @@ export const updateAccessToken = catchAsyncErrors(async(req: Request, res:Respon
                     expiresIn: '3d'
                 })
 
-                res.cookie("access_token", accessToken)
+                res.cookie("access_token", accessToken,accessTokenOptions)
+                res.cookie("refresh_token", refreshToken,refreshTokenOptions)
+
+                res.status(200).json({
+                    status: "success",
+                    accessToken
+                })
     }catch (error:any) {
+        return next(new ErrorHandler(error.message, 400))
+    }
+})
+
+
+//get user info
+export const getUserInfo = catchAsyncErrors(async(req: Request, res:Response,next:NextFunction)=> {
+    try {
+        const userId = req.user?._id
+        getUserById(userId, res)   
+    }catch (error:any) {
+        return next(new ErrorHandler(error.message, 400))
+    }
+})
+
+
+
+
+//get social Auth
+interface ISocialAuthBody {
+    email:string,
+    name:string,
+    avatar: string,
+}
+export const socialAuth = catchAsyncErrors(async(req: Request, res:Response,next:NextFunction)=> {
+    try {
+        const {email, name, avatar} = req.body as ISocialAuthBody;
+        const user = await userModel.findOne({email})
+        if(!user) {
+            const newUser = await  userModel.create({email,name,avatar})
+            sendToken(newUser,200,res)
+        } else {
+            sendToken(user,200,res)
+        }
+    } catch (error:any) {
         return next(new ErrorHandler(error.message, 400))
     }
 })
