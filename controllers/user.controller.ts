@@ -10,6 +10,7 @@ import sendMail from "../utils/sendMail";
 import { accessTokenOptions, refreshTokenOptions, sendToken } from "../utils/jwt";
 import {redis} from "../utils/redis"
 import { getUserById } from "../services/user.services";
+import { json } from "stream/consumers";
 interface IRegistration {
     name: string,
     email: string,
@@ -162,7 +163,7 @@ export const logoutUser = catchAsyncErrors(async(req: Request,res:Response, next
     }
 })
 
-// UPDATE REFRESH TOKEN
+// UPDATE ACCESS TOKEN
 export const updateAccessToken = catchAsyncErrors(async(req: Request, res:Response,next:NextFunction)=> {
     try {
             const refresh_token = req.cookies.refresh_token as string;
@@ -187,6 +188,8 @@ export const updateAccessToken = catchAsyncErrors(async(req: Request, res:Respon
                 const refreshToken = jwt.sign({is:user._id},process.env.REFRESH_TOKEN as string,{
                     expiresIn: '3d'
                 })
+
+                    req.user = user;
 
                 res.cookie("access_token", accessToken,accessTokenOptions)
                 res.cookie("refresh_token", refreshToken,refreshTokenOptions)
@@ -260,7 +263,7 @@ export const updateUserInfo = catchAsyncErrors (async(req: Request, res:Response
                         user.name = name
                 }
                 await user?.save()
-
+                console.log(user, "is a user")
                 await  redis.set(userID,JSON.stringify(user));
 
                 res.status(201).json({
@@ -269,6 +272,51 @@ export const updateUserInfo = catchAsyncErrors (async(req: Request, res:Response
                 })
                 
                 
+    } catch (error:any) {
+        return next(new ErrorHandler(error.message, 400))
+    }
+})
+
+//update user password
+
+interface IUpdatePassword {
+    oldPassword: string,
+    newPassword:string,
+
+}
+
+export const updatePasword = catchAsyncErrors (async(req: Request, res:Response,next:NextFunction)=> {
+
+
+    try {
+        const {oldPassword, newPassword} = req.body as IUpdatePassword
+
+        if(!oldPassword || !newPassword){
+
+            return next(new ErrorHandler("Please enter old and new password", 400))
+        }
+
+        const user = await userModel.findById(req.user?._id).select("+password");
+
+        if(user?.password === undefined) {
+            return next(new ErrorHandler("Invalid user", 400))
+        }
+
+        const isPasswordMatching = await user?.comparePasswords(oldPassword)
+
+        if(!isPasswordMatching){
+            return next (new ErrorHandler("Old password is incorrect", 400))
+        }
+        user.password = newPassword;
+
+        await user.save();
+
+        await redis.set(req.user?._id, JSON.stringify(user));
+
+        res.status(201).json({
+            success:true,
+            user
+        })
     } catch (error:any) {
         return next(new ErrorHandler(error.message, 400))
     }
