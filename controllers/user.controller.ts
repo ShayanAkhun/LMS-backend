@@ -11,6 +11,7 @@ import { accessTokenOptions, refreshTokenOptions, sendToken } from "../utils/jwt
 import {redis} from "../utils/redis"
 import { getUserById } from "../services/user.services";
 import { json } from "stream/consumers";
+import cloudinary from "cloudinary"
 interface IRegistration {
     name: string,
     email: string,
@@ -317,6 +318,34 @@ export const updatePasword = catchAsyncErrors (async(req: Request, res:Response,
             success:true,
             user
         })
+    } catch (error:any) {
+        return next(new ErrorHandler(error.message, 400))
+    }
+})
+
+
+//UPDATE USER AVATAR
+
+interface IUpdateUserAvatar {
+    avatar: string;
+}
+
+export const updateAvatar =catchAsyncErrors (async(req: Request, res:Response,next:NextFunction)=> {
+    try {
+            const {avatar} = req.body as IUpdateUserAvatar;
+            
+            const userId = req.user?._id;
+            const user = await userModel.findById(userId)
+
+            if(user?.avatar?.public_id){
+                await cloudinary.v2.uploader.destroy(user?.avatar?.public_id)
+            } else {
+                await cloudinary.v2.uploader.upload(avatar,{
+                    folder:'avatar',
+                    width: 150,  
+                })
+                user?.avatar
+            }
     } catch (error:any) {
         return next(new ErrorHandler(error.message, 400))
     }
