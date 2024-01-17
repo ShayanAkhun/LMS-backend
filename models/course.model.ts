@@ -26,4 +26,5 @@ interface ICourseData extends Document {
     links: ILink[],
     suggestions: string,
     questions: IComment[],
+    test: string
 }
