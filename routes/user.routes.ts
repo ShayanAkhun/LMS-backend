@@ -1,13 +1,13 @@
 import express from 'express'
 import { regristrationUser,activateUser, loginUser, logoutUser, updateAccessToken, getUserInfo, socialAuth, updateUserInfo,updatePasword } from '../controllers/user.controller';
-import { isAuthenticated } from '../middleware/auth';
+import { authrorizeRoles, isAuthenticated } from '../middleware/auth';
 
 const userRouter = express.Router();
 
 userRouter.post('/regristration',regristrationUser);
 userRouter.post('/activate-user',activateUser);
 userRouter.post('/login',loginUser);
-userRouter.get('/logout',isAuthenticated,logoutUser);
+userRouter.get('/logout',isAuthenticated,authrorizeRoles("admin"),logoutUser);
 userRouter.get('/refresh',updateAccessToken);
 userRouter.get('/get-user-info',isAuthenticated,getUserInfo);
 userRouter.post('/get-social-auth',socialAuth);

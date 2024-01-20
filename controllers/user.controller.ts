@@ -2,13 +2,13 @@ require("dotenv").config()
 import { Request, Response, NextFunction } from "express";
 import userModel, { IUser } from "../models/user.model";
 import ErrorHandler from "../utils/ErrorHandler";
-import { catchAsyncErrors } from "../middleware/catchAsyncErrors";
+import { CatchAsyncErrors } from "../middleware/catchAsyncErrors";
 import jwt, { JwtPayload, Secret } from "jsonwebtoken";
 import ejs from 'ejs';
 import path from 'path'
 import sendMail from "../utils/sendMail";
 import { accessTokenOptions, refreshTokenOptions, sendToken } from "../utils/jwt";
-import {redis} from "../utils/redis"
+import { redis } from "../utils/redis"
 import { getUserById } from "../services/user.services";
 import { json } from "stream/consumers";
 import cloudinary from "cloudinary"
@@ -19,7 +19,7 @@ interface IRegistration {
     avatar?: string
 }
 
-export const regristrationUser = catchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
+export const regristrationUser = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
 
     try {
         const { name, email, password } = req.body;
@@ -84,7 +84,7 @@ interface IActivationRequest {
     activation_code: string,
 }
 
-export const activateUser = catchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
+export const activateUser = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { activation_token, activation_code } = req.body as IActivationRequest;
         const newUser: { user: IUser, activationCode: string } = jwt.verify(
@@ -122,7 +122,7 @@ interface ILoginRequest {
     password: string,
 }
 
-export const loginUser = catchAsyncErrors(async ( req: Request,res: Response, next: NextFunction) => {
+export const loginUser = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { email, password } = req.body as ILoginRequest;
 
@@ -148,69 +148,69 @@ export const loginUser = catchAsyncErrors(async ( req: Request,res: Response, ne
 })
 
 //LOGOUT USER
-export const logoutUser = catchAsyncErrors(async(req: Request,res:Response, next:NextFunction) => {
-    try {   
-        res.cookie("access_token","", {maxAge:1});
-        res.cookie("refresh_token","",{maxAge: 1});
+export const logoutUser = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        res.cookie("access_token", "", { maxAge: 1 });
+        res.cookie("refresh_token", "", { maxAge: 1 });
         const userId = req.user?._id || "";
-        redis.del(userId) 
+        redis.del(userId)
         res.status(200).json({
             success: true,
             message: "logged out successfully"
         })
-        
-    } catch (error:any) {
+
+    } catch (error: any) {
         return next(new ErrorHandler(error.message, 400))
     }
 })
 
 // UPDATE ACCESS TOKEN
-export const updateAccessToken = catchAsyncErrors(async(req: Request, res:Response,next:NextFunction)=> {
+export const updateAccessToken = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
     try {
-            const refresh_token = req.cookies.refresh_token as string;
-            const decoded = jwt.verify(refresh_token,
-                process.env.REFRESH_TOKEN as string) as JwtPayload;
-                
-                const message = "could not refresh token"
-                if(!decoded){
-                    return next(new ErrorHandler(message, 400))
-                    
-                }
-                const sessions = await redis.get(decoded.id as string);
-                
-                if(!sessions){
-                    return next(new ErrorHandler(message, 400))
-                }
-                const user = JSON.parse(sessions);
+        const refresh_token = req.cookies.refresh_token as string;
+        const decoded = jwt.verify(refresh_token,
+            process.env.REFRESH_TOKEN as string) as JwtPayload;
 
-                const accessToken = jwt.sign({is:user._id},process.env.ACCESS_TOKEN as string,{
-                    expiresIn: '5m'
-                })
-                const refreshToken = jwt.sign({is:user._id},process.env.REFRESH_TOKEN as string,{
-                    expiresIn: '3d'
-                })
+        const message = "could not refresh token"
+        if (!decoded) {
+            return next(new ErrorHandler(message, 400))
 
-                    req.user = user;
+        }
+        const sessions = await redis.get(decoded.id as string);
 
-                res.cookie("access_token", accessToken,accessTokenOptions)
-                res.cookie("refresh_token", refreshToken,refreshTokenOptions)
+        if (!sessions) {
+            return next(new ErrorHandler(message, 400))
+        }
+        const user = JSON.parse(sessions);
 
-                res.status(200).json({
-                    status: "success",
-                    accessToken
-                })
-    }catch (error:any) {
+        const accessToken = jwt.sign({ is: user._id }, process.env.ACCESS_TOKEN as string, {
+            expiresIn: '5m'
+        })
+        const refreshToken = jwt.sign({ is: user._id }, process.env.REFRESH_TOKEN as string, {
+            expiresIn: '3d'
+        })
+
+        req.user = user;
+
+        res.cookie("access_token", accessToken, accessTokenOptions)
+        res.cookie("refresh_token", refreshToken, refreshTokenOptions)
+
+        res.status(200).json({
+            status: "success",
+            accessToken
+        })
+    } catch (error: any) {
         return next(new ErrorHandler(error.message, 400))
     }
 })
 
 
 //get user info
-export const getUserInfo = catchAsyncErrors(async(req: Request, res:Response,next:NextFunction)=> {
+export const getUserInfo = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
     try {
         const userId = req.user?._id
-        getUserById(userId, res)   
-    }catch (error:any) {
+        getUserById(userId, res)
+    } catch (error: any) {
         return next(new ErrorHandler(error.message, 400))
     }
 })
@@ -220,21 +220,21 @@ export const getUserInfo = catchAsyncErrors(async(req: Request, res:Response,nex
 
 //get social Auth
 interface ISocialAuthBody {
-    email:string,
-    name:string,
+    email: string,
+    name: string,
     avatar: string,
 }
-export const socialAuth = catchAsyncErrors(async(req: Request, res:Response,next:NextFunction)=> {
+export const socialAuth = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const {email, name, avatar} = req.body as ISocialAuthBody;
-        const user = await userModel.findOne({email})
-        if(!user) {
-            const newUser = await  userModel.create({email,name,avatar})
-            sendToken(newUser,200,res)
+        const { email, name, avatar } = req.body as ISocialAuthBody;
+        const user = await userModel.findOne({ email })
+        if (!user) {
+            const newUser = await userModel.create({ email, name, avatar })
+            sendToken(newUser, 200, res)
         } else {
-            sendToken(user,200,res)
+            sendToken(user, 200, res)
         }
-    } catch (error:any) {
+    } catch (error: any) {
         return next(new ErrorHandler(error.message, 400))
     }
 })
@@ -242,38 +242,38 @@ export const socialAuth = catchAsyncErrors(async(req: Request, res:Response,next
 //Update user info
 
 interface IUpdateUserInfo {
-    name? : string,
-    email? :string,
+    name?: string,
+    email?: string,
 }
 
-export const updateUserInfo = catchAsyncErrors (async(req: Request, res:Response,next:NextFunction)=> {
+export const updateUserInfo = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
     try {
-                const {email, name} = req.body as IUpdateUserInfo;
-                const userID = req.user?._id
-                const user = await userModel.findById(userID);
+        const { email, name } = req.body as IUpdateUserInfo;
+        const userID = req.user?._id
+        const user = await userModel.findById(userID);
 
-                if(email && user ){
-                    const isEmailExisting = await userModel.findOne({email}) 
-                    if(isEmailExisting){
-                        return next(new ErrorHandler("Email already Exists", 400))
-                    }
-                    user.email = email;
-                }
+        if (email && user) {
+            const isEmailExisting = await userModel.findOne({ email })
+            if (isEmailExisting) {
+                return next(new ErrorHandler("Email already Exists", 400))
+            }
+            user.email = email;
+        }
 
-                if(name && user) {
-                        user.name = name
-                }
-                await user?.save()
-                console.log(user, "is a user")
-                await  redis.set(userID,JSON.stringify(user));
+        if (name && user) {
+            user.name = name
+        }
+        await user?.save()
+        console.log(user, "is a user")
+        await redis.set(userID, JSON.stringify(user));
 
-                res.status(201).json({
-                    success: true,
-                    user
-                })
-                
-                
-    } catch (error:any) {
+        res.status(201).json({
+            success: true,
+            user
+        })
+
+
+    } catch (error: any) {
         return next(new ErrorHandler(error.message, 400))
     }
 })
@@ -282,31 +282,31 @@ export const updateUserInfo = catchAsyncErrors (async(req: Request, res:Response
 
 interface IUpdatePassword {
     oldPassword: string,
-    newPassword:string,
+    newPassword: string,
 
 }
 
-export const updatePasword = catchAsyncErrors (async(req: Request, res:Response,next:NextFunction)=> {
+export const updatePasword = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
 
 
     try {
-        const {oldPassword, newPassword} = req.body as IUpdatePassword
+        const { oldPassword, newPassword } = req.body as IUpdatePassword
 
-        if(!oldPassword || !newPassword){
+        if (!oldPassword || !newPassword) {
 
             return next(new ErrorHandler("Please enter old and new password", 400))
         }
 
         const user = await userModel.findById(req.user?._id).select("+password");
 
-        if(user?.password === undefined) {
+        if (user?.password === undefined) {
             return next(new ErrorHandler("Invalid user", 400))
         }
 
         const isPasswordMatching = await user?.comparePasswords(oldPassword)
 
-        if(!isPasswordMatching){
-            return next (new ErrorHandler("Old password is incorrect", 400))
+        if (!isPasswordMatching) {
+            return next(new ErrorHandler("Old password is incorrect", 400))
         }
         user.password = newPassword;
 
@@ -315,10 +315,10 @@ export const updatePasword = catchAsyncErrors (async(req: Request, res:Response,
         await redis.set(req.user?._id, JSON.stringify(user));
 
         res.status(201).json({
-            success:true,
+            success: true,
             user
         })
-    } catch (error:any) {
+    } catch (error: any) {
         return next(new ErrorHandler(error.message, 400))
     }
 })
@@ -330,23 +330,23 @@ interface IUpdateUserAvatar {
     avatar: string;
 }
 
-export const updateAvatar =catchAsyncErrors (async(req: Request, res:Response,next:NextFunction)=> {
+export const updateAvatar = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
     try {
-            const {avatar} = req.body as IUpdateUserAvatar;
-            
-            const userId = req.user?._id;
-            const user = await userModel.findById(userId)
+        const { avatar } = req.body as IUpdateUserAvatar;
 
-            if(user?.avatar?.public_id){
-                await cloudinary.v2.uploader.destroy(user?.avatar?.public_id)
-            } else {
-                await cloudinary.v2.uploader.upload(avatar,{
-                    folder:'avatar',
-                    width: 150,  
-                })
-                user?.avatar
-            }
-    } catch (error:any) {
+        const userId = req.user?._id;
+        const user = await userModel.findById(userId)
+
+        if (user?.avatar?.public_id) {
+            await cloudinary.v2.uploader.destroy(user?.avatar?.public_id)
+        } else {
+            await cloudinary.v2.uploader.upload(avatar, {
+                folder: 'avatar',
+                width: 150,
+            })
+            user?.avatar
+        }
+    } catch (error: any) {
         return next(new ErrorHandler(error.message, 400))
     }
 })
