@@ -4,6 +4,8 @@ import ErrorHandler from "../utils/ErrorHandler";
 import cloudindary from "cloudinary";
 import { createCourse } from "../services/course.service";
 import CourseModel from "../models/course.model";
+import { redis } from "../utils/redis";
+import mongoose from "mongoose";
 
 
 
@@ -73,13 +75,24 @@ export const editCourse = CatchAsyncErrors(async (req: Request, res: Response, n
 export const getSingleCourse = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
     try {
 
-        const course = await CourseModel.findById(req.params.id).select("-courseData.videoUrl -courseData.suggestions -courseData.questions -courseData.links")
+        const courseId = req.params.id;
 
-        res.status(201).json({
-            success: true,
-            course
-        })
+        const doesCacheExists = await redis.get(courseId);
 
+        if (doesCacheExists) {
+            const course = JSON.parse(doesCacheExists)
+            res.status(200).json({
+                success: true,
+                course
+            })
+        } else {
+            const course = await CourseModel.findById(req.params.id).select("-courseData.videoUrl -courseData.suggestions -courseData.questions -courseData.links")
+
+            res.status(201).json({
+                success: true,
+                course
+            })
+        }
     } catch (error: any) {
         return next(new ErrorHandler(error.message, 500))
     }
@@ -88,13 +101,81 @@ export const getSingleCourse = CatchAsyncErrors(async (req: Request, res: Respon
 
 export const getAllCourse = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
     try {
+        const doesCacheExists = await redis.get("allCourses");
 
-        const courses = await CourseModel.find().select("-courseData.videoUrl -courseData.suggestions -courseData.questions -courseData.links")
+        if (doesCacheExists) {
+            const course = JSON.parse(doesCacheExists)
+            res.status(200).json({
+                success: true,
+                course
+            })
+        } else {
+            const courses = await CourseModel.find().select("-courseData.videoUrl -courseData.suggestions -courseData.questions -courseData.links")
 
-        res.status(201).json({
+            await redis.set("allCourses", JSON.stringify((courses)))
+
+            res.status(201).json({
+                success: true,
+                courses
+            })
+        }
+
+
+
+
+
+    } catch (error: any) {
+        return next(new ErrorHandler(error.message, 500))
+    }
+})
+
+
+//GET COURSE CONTENT -- FOR PREMIUM USERS
+
+export const getCourseByPremiumUser = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userCourseList = req.user?.courses;
+        const courseId = req.params.id;
+
+        const courseExists = userCourseList?.find((course: any) => course._id.string() === courseId);
+
+        if (!courseExists) {
+            return next(new ErrorHandler("You are not eligible to access this course content", 400))
+
+        }
+        const course = await CourseModel.findById(courseId);
+
+        const content = course?.courseData;
+
+        res.status(200).json({
             success: true,
-            courses
+            content
         })
+    } catch (error: any) {
+        return next(new ErrorHandler(error.message, 500))
+    }
+})
+
+
+//ADD QUESTIONS IN COURSE
+
+interface IAddQuestionData {
+    question: string,
+    courseId: string,
+    contentId: string
+}
+
+export const addQuestion = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { question, courseId, contentId }: IAddQuestionData = req.body;
+        const course = await CourseModel.findById(courseId)
+
+        if (!mongoose.Types.ObjectId.isValid(contentId)) {
+            return next(new ErrorHandler("Invalid content Id", 400))
+        }
+
+        const courseContent = course?.courseData?.find((item:any) =>item._id.equals(courseId))
+        
 
     } catch (error: any) {
         return next(new ErrorHandler(error.message, 500))
