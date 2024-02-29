@@ -8,6 +8,7 @@ import path from "path";
 import ejs from "ejs";
 import sendMail from "../utils/sendMail";
 import NotificationModel from "../models/notifications.model";
+import { newOrder } from "../services/order.service";
 
 
 //CREATE ORDER
@@ -34,6 +35,16 @@ export const createOrder = CatchAsyncErrors(async (req: Request, res: Response, 
         const data : any = {
             courseId: course._id,
             userId: user?._id
+        }
+
+        newOrder(data,res,next);
+        const mailData = {
+            order : {
+                _id:course._id.slice(0,6),
+                name:course.name,
+                price:course.price,
+                date:new Date().toLocaleDateString("en-US",{year: "numeric", month: "long", day: "numeric"})
+            }
         }
 
     } catch (error: any) {
