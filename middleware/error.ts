@@ -4,8 +4,8 @@ import { Response, Request, NextFunction } from "express";
 
 export const MiddlewareError = (
   err: any,
-  req: Request,
   res: Response,
+  req: Request,
   next: NextFunction
 ) => {
   err.statusCode = err.statusCode || 500;
@@ -39,4 +39,4 @@ export const MiddlewareError = (
     success: false,
     message: err.message,
   });
-};  
+};
