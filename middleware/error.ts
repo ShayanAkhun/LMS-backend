@@ -1,11 +1,11 @@
 import ErrorHandler from "../utils/ErrorHandler";
-import { Response, Request, NextFunction } from "express";
+import { Request,Response,  NextFunction } from "express";
 
 
 export const MiddlewareError = (
   err: any,
-  res: Response,
   req: Request,
+  res: Response,
   next: NextFunction
 ) => {
   err.statusCode = err.statusCode || 500;

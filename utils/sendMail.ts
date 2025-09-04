@@ -25,7 +25,7 @@ const sendMail = async (options: EMailOptions):Promise <void> => {
     const {email, subject, template, data} = options;
 
         //gets the path to the ejs file and renders it to html
-    const templatePath = path.join(__dirname, `../mails/${template}.ejs`);
+    const templatePath = path.join(__dirname, `../mails/${template}`);
 
     //renders the ejs file to html
     const html:string = await ejs.renderFile(templatePath, data);
