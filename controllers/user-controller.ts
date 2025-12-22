@@ -1,12 +1,13 @@
 require("dotenv").config();
 import ErrorHandler from "../utils/ErrorHandler";
 import { Response, Request, NextFunction } from "express";
-import userModel from "../models/user.model";
+import userModel, { IUser } from "../models/user.model";
 import { CatchAsyncErrors } from "../middleware/CatchAsyncErrors";
 import jwt, { Secret } from "jsonwebtoken";
 import ejs from "ejs"
 import path from "path";
 import sendMail from "../utils/sendMail";
+import { sendToken } from "../utils/jwt";
 
 
 interface IRegisterBody {
@@ -15,7 +16,7 @@ interface IRegisterBody {
     password: string;
     avatar?: string
 }
-export const registeringUsers = CatchAsyncErrors(async (req: Request,res: Response, next: NextFunction) => {
+export const registeringUsers = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { name, email, password, } = req.body;
         const ifEmailExists = await userModel.findOne({ email });
@@ -31,7 +32,7 @@ export const registeringUsers = CatchAsyncErrors(async (req: Request,res: Respon
 
         const activationCode = activationToken.activationCode;
         const data = {
-            user :{name:user.name},
+            user: { name: user.name },
             activationCode
         }
 
@@ -50,7 +51,7 @@ export const registeringUsers = CatchAsyncErrors(async (req: Request,res: Respon
                 activationToken: activationToken.token
             });
 
-        } catch (error :any) {
+        } catch (error: any) {
             return next(new ErrorHandler(error.message, 400));
         }
 
@@ -69,8 +70,88 @@ export const createActivationToken = (user: any): IActivationToken => {
 
     const token = jwt.sign({
         user, activationCode
-    }, process.env.ACTIVATION_SECRET as Secret , {
+    }, process.env.ACTIVATION_SECRET as Secret, {
         expiresIn: "5m"
     })
-return {token , activationCode}
+    return { token, activationCode }
 }
+
+
+//activate user
+
+interface IActivateUser {
+    activation_token: string;
+    activation_code: string;
+}
+export const activateUser = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
+    try {
+
+        const { activation_token, activation_code } = req.body as IActivateUser ;
+
+        const newUser: { user: IUser; activationCode: string } = jwt.verify(
+            activation_token,
+            process.env.ACTIVATION_SECRET as Secret
+        ) as { user: IUser; activationCode: string };
+
+        if (newUser.activationCode !== activation_code) {
+            return next(new ErrorHandler("Invalid activation code", 400));
+        }
+
+        const { name, email, password, } = newUser.user;
+
+        const userExists = await userModel.findOne({ email });
+        if (userExists) {
+            return next(new ErrorHandler("user already exists", 400));
+        }
+        const user = await userModel.create({
+            name,
+            email,
+            password,
+        });
+        res.status(201).json({
+            success: true,
+            message: "User activated successfully",
+            user
+        });
+
+    }
+    catch (error: any) {
+        return next(new ErrorHandler(error.message, 400));
+    }
+})
+
+//login user
+
+interface ILoginRequest {
+    email: string;
+    password: string;
+}
+
+export const loginUser = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
+
+    try {
+            const { email, password } = req.body as ILoginRequest;
+
+            if (!email || !password) {
+                return next(new ErrorHandler("Please provide email and password", 400));
+            }
+
+            const user = await userModel.findOne({ email }).select("+password");
+
+            if(!user) {
+                return next(new ErrorHandler("Invalid email or password", 401));
+            }
+            const doesPasswordMatched = await user.comparePassword(password);
+            if(!doesPasswordMatched) {
+                return next(new ErrorHandler("Invalid email or password", 401));
+            }
+
+            sendToken(user, 200, res);
+
+    } catch (error: any) {
+        return next(new ErrorHandler(error.message, 400));
+    }
+
+})
+
+//Logout user
