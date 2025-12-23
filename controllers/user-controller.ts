@@ -8,6 +8,7 @@ import ejs from "ejs"
 import path from "path";
 import sendMail from "../utils/sendMail";
 import { sendToken } from "../utils/jwt";
+import { redis } from "../utils/redis";
 
 
 interface IRegisterBody {
@@ -86,7 +87,7 @@ interface IActivateUser {
 export const activateUser = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
     try {
 
-        const { activation_token, activation_code } = req.body as IActivateUser ;
+        const { activation_token, activation_code } = req.body as IActivateUser;
 
         const newUser: { user: IUser; activationCode: string } = jwt.verify(
             activation_token,
@@ -130,23 +131,23 @@ interface ILoginRequest {
 export const loginUser = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
 
     try {
-            const { email, password } = req.body as ILoginRequest;
+        const { email, password } = req.body as ILoginRequest;
 
-            if (!email || !password) {
-                return next(new ErrorHandler("Please provide email and password", 400));
-            }
+        if (!email || !password) {
+            return next(new ErrorHandler("Please provide email and password", 400));
+        }
 
-            const user = await userModel.findOne({ email }).select("+password");
+        const user = await userModel.findOne({ email }).select("+password");
 
-            if(!user) {
-                return next(new ErrorHandler("Invalid email or password", 401));
-            }
-            const doesPasswordMatched = await user.comparePassword(password);
-            if(!doesPasswordMatched) {
-                return next(new ErrorHandler("Invalid email or password", 401));
-            }
+        if (!user) {
+            return next(new ErrorHandler("Invalid email or password", 401));
+        }
+        const doesPasswordMatched = await user.comparePassword(password);
+        if (!doesPasswordMatched) {
+            return next(new ErrorHandler("Invalid email or password", 401));
+        }
 
-            sendToken(user, 200, res);
+        sendToken(user, 200, res);
 
     } catch (error: any) {
         return next(new ErrorHandler(error.message, 400));
@@ -155,3 +156,56 @@ export const loginUser = CatchAsyncErrors(async (req: Request, res: Response, ne
 })
 
 //Logout user
+
+export const logoutUser = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userId = req.user?._id?.toString();
+        
+        // Clear cookies with proper options (same as when setting them)
+        // Must match the options used when setting cookies for browser to clear them properly
+        // Path must be explicitly set to "/" to match the default path used when setting cookies
+        const cookieOptions: any = {
+            expires: new Date(0),
+            maxAge: 0,
+            httpOnly: true,
+            sameSite: "lax",
+            path: "/"
+        };
+        
+        // Add secure flag in production (must match when setting)
+        if (process.env.NODE_ENV === "production") {
+            cookieOptions.secure = true;
+        }
+        
+        res.clearCookie("accessToken", cookieOptions);
+        res.clearCookie("refreshToken", cookieOptions);
+
+        // Delete user from Redis if userId exists
+        if (userId) {
+            await redis.del(`user:${userId}`);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "Logged out successfully"
+        });
+    } catch (error: any) {
+        // Even if there's an error, try to clear cookies
+        const cookieOptions: any = {
+            expires: new Date(0),
+            maxAge: 0,
+            httpOnly: true,
+            sameSite: "lax",
+            path: "/"
+        };
+        
+        if (process.env.NODE_ENV === "production") {
+            cookieOptions.secure = true;
+        }
+        
+        res.clearCookie("accessToken", cookieOptions);
+        res.clearCookie("refreshToken", cookieOptions);
+        
+        return next(new ErrorHandler(error.message, 400));
+    }
+})
