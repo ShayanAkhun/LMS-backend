@@ -25,19 +25,17 @@ export const sendToken = async (user: IUser, statusCode: number, res: Response) 
     const refreshTokenExpiresIn = parseInt(process.env.REFRESH_TOKEN_EXPIRES_IN || '1210', 10)
 
     // options  for cookies
-    const accessTokenOptions: any = {
+    const accessTokenOptions: ITokenPayload = {
         expires: new Date(Date.now() + accessTokenEpiresIn * 1000),
         maxAge: accessTokenEpiresIn * 1000,
         httpOnly: true,
         sameSite: "lax",
-        path: "/"
     }
-    const refreshTokenOptions: any = {
+    const refreshTokenOptions: ITokenPayload = {
         expires: new Date(Date.now() + refreshTokenExpiresIn * 1000),
         maxAge: refreshTokenExpiresIn * 1000,
         httpOnly: true,
         sameSite: "lax",
-        path: "/"
     }
 
     //only set secure flag in production

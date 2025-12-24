@@ -7,21 +7,33 @@ import { redis } from "../utils/redis";
 export const isAuthenticated = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const accessToken = req.cookies.accessToken;
+        console.log("Access Token:", accessToken);
+        console.log("ACCESS_TOKEN env:", process.env.ACCESS_TOKEN);
 
         if (!accessToken) {
             return next(new ErrorHandler("Invalid Token. Please login again", 400));
         }
-        
+
+        if (!process.env.ACCESS_TOKEN) {
+            return next(new ErrorHandler("ACCESS_TOKEN environment variable is not set", 500));
+        }
+
         const decoded = jwt.verify(accessToken, process.env.ACCESS_TOKEN as string) as JwtPayload;
         if (!decoded || !decoded.id) {
             return next(new ErrorHandler("access token is not valid", 400));
         }
-        
+
         const user = await redis.get(`user:${decoded.id}`);
         if (!user) {
             return next(new ErrorHandler("user not found", 400));
         }
-        req.user = JSON.parse(user);
+
+        const parsedUser = JSON.parse(user);
+        // Ensure _id is properly set
+        if (!parsedUser._id) {
+            parsedUser._id = decoded.id;
+        }
+        req.user = parsedUser;
         next();
     } catch (error: any) {
         // Handle JWT errors (expired, invalid, etc.)
