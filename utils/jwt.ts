@@ -11,6 +11,23 @@ interface ITokenPayload {
     sameSite: "lax" | "strict" | "none" | undefined;
 }
 
+    //parse environment variables to integrates with fallback values
+  export  const accessTokenEpiresIn = parseInt(process.env.ACCESS_TOKEN_EXPIRES_IN || '300', 10)
+    export const refreshTokenExpiresIn = parseInt(process.env.REFRESH_TOKEN_EXPIRES_IN || '1210', 10)
+
+    // options  for cookies
+  export  const accessTokenOptions: ITokenPayload = {
+        expires: new Date(Date.now() + accessTokenEpiresIn * 60 * 60 * 1000),
+        maxAge: accessTokenEpiresIn * 60 * 60* 1000,
+        httpOnly: true,
+        sameSite: "lax",
+    }
+   export const refreshTokenOptions: ITokenPayload = {
+        expires: new Date(Date.now() + refreshTokenExpiresIn * 24 * 60 * 60 * 1000),
+        maxAge: refreshTokenExpiresIn * 24 * 60 * 60 * 1000,
+        httpOnly: true,
+        sameSite: "lax",
+    }
 
 export const sendToken = async (user: IUser, statusCode: number, res: Response) => {
     const accessToken = user.SignAccessToken();
@@ -20,23 +37,7 @@ export const sendToken = async (user: IUser, statusCode: number, res: Response) 
     redis.set(`user:${user._id.toString()}`, JSON.stringify(user));
 
 
-    //parse environment variables to integrates with fallback values
-    const accessTokenEpiresIn = parseInt(process.env.ACCESS_TOKEN_EXPIRES_IN || '300', 10)
-    const refreshTokenExpiresIn = parseInt(process.env.REFRESH_TOKEN_EXPIRES_IN || '1210', 10)
 
-    // options  for cookies
-    const accessTokenOptions: ITokenPayload = {
-        expires: new Date(Date.now() + accessTokenEpiresIn * 1000),
-        maxAge: accessTokenEpiresIn * 1000,
-        httpOnly: true,
-        sameSite: "lax",
-    }
-    const refreshTokenOptions: ITokenPayload = {
-        expires: new Date(Date.now() + refreshTokenExpiresIn * 1000),
-        maxAge: refreshTokenExpiresIn * 1000,
-        httpOnly: true,
-        sameSite: "lax",
-    }
 
     //only set secure flag in production
     if (process.env.NODE_ENV === "production") {

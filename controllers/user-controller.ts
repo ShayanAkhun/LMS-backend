@@ -3,11 +3,11 @@ import ErrorHandler from "../utils/ErrorHandler";
 import { Response, Request, NextFunction } from "express";
 import userModel, { IUser } from "../models/user.model";
 import { CatchAsyncErrors } from "../middleware/CatchAsyncErrors";
-import jwt, { Secret } from "jsonwebtoken";
+import jwt, { Secret,JwtPayload } from "jsonwebtoken";
 import ejs from "ejs"
 import path from "path";
 import sendMail from "../utils/sendMail";
-import { sendToken } from "../utils/jwt";
+import { accessTokenOptions, refreshTokenOptions, sendToken } from "../utils/jwt";
 import { redis } from "../utils/redis";
 
 
@@ -178,3 +178,56 @@ export const logoutUser = CatchAsyncErrors(async (req: Request, res: Response, n
         return next(new ErrorHandler(error.message, 400));
     }
 })
+
+//update the refresh token
+
+export const updateRefreshToken = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
+    try {
+            const refresh_token = req.cookies.refreshToken as string;
+            const decoded = jwt.verify(refresh_token, process.env.REFRESH_TOKEN as string) as JwtPayload;
+
+            const message = "could not refresh token, please login again";
+            const tokenMessage = "Token refreshed successfully";
+
+
+            if (!decoded ) {
+                return next(new ErrorHandler(message, 400));
+            }
+            const session = await redis.get(`user:${decoded.id as string}`);
+            if (!session) {
+                return next(new ErrorHandler(message, 400));
+            }
+            const user = JSON.parse(session);
+
+            const accessToken = jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN as string,{
+                expiresIn: "5m"
+            })
+
+
+                const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN as string,{
+                expiresIn: "3d"
+            })
+            res.cookie("accessToken", accessToken, accessTokenOptions);
+            res.cookie("refreshToken", refreshToken, refreshTokenOptions);
+
+            const safeUser = {
+                _id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+            };
+
+            return res.status(200).json({
+                success: true,
+                user: safeUser,
+                accessToken,
+                tokenMessage
+            });
+
+
+    } catch (error: any) {
+        return next(new ErrorHandler(error.message, 400));
+    }
+})
+
+//Get user info
