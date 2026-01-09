@@ -3,12 +3,13 @@ import ErrorHandler from "../utils/ErrorHandler";
 import { Response, Request, NextFunction } from "express";
 import userModel, { IUser } from "../models/user.model";
 import { CatchAsyncErrors } from "../middleware/CatchAsyncErrors";
-import jwt, { Secret,JwtPayload } from "jsonwebtoken";
+import jwt, { Secret, JwtPayload } from "jsonwebtoken";
 import ejs from "ejs"
 import path from "path";
 import sendMail from "../utils/sendMail";
 import { accessTokenOptions, refreshTokenOptions, sendToken } from "../utils/jwt";
 import { redis } from "../utils/redis";
+import { getUserById } from "../services/user.service";
 
 
 interface IRegisterBody {
@@ -183,46 +184,47 @@ export const logoutUser = CatchAsyncErrors(async (req: Request, res: Response, n
 
 export const updateRefreshToken = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
     try {
-            const refresh_token = req.cookies.refreshToken as string;
-            const decoded = jwt.verify(refresh_token, process.env.REFRESH_TOKEN as string) as JwtPayload;
+        const refresh_token = req.cookies.refreshToken as string;
+        const decoded = jwt.verify(refresh_token, process.env.REFRESH_TOKEN as string) as JwtPayload;
 
-            const message = "could not refresh token, please login again";
-            const tokenMessage = "Token refreshed successfully";
-
-
-            if (!decoded ) {
-                return next(new ErrorHandler(message, 400));
-            }
-            const session = await redis.get(`user:${decoded.id as string}`);
-            if (!session) {
-                return next(new ErrorHandler(message, 400));
-            }
-            const user = JSON.parse(session);
-
-            const accessToken = jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN as string,{
-                expiresIn: "5m"
-            })
+        const message = "could not refresh token, please login again";
+        const tokenMessage = "Token refreshed successfully";
 
 
-                const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN as string,{
-                expiresIn: "3d"
-            })
-            res.cookie("accessToken", accessToken, accessTokenOptions);
-            res.cookie("refreshToken", refreshToken, refreshTokenOptions);
+        if (!decoded) {
+            return next(new ErrorHandler(message, 400));
+        }
+        const session = await redis.get(`user:${decoded.id as string}`);
+        if (!session) {
+            return next(new ErrorHandler(message, 400));
+        }
+        const user = JSON.parse(session);
 
-            const safeUser = {
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-            };
+        const accessToken = jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN as string, {
+            expiresIn: "5m"
+        })
 
-            return res.status(200).json({
-                success: true,
-                user: safeUser,
-                accessToken,
-                tokenMessage
-            });
+
+        const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN as string, {
+            expiresIn: "3d"
+        })
+        req.user = user;
+        res.cookie("accessToken", accessToken, accessTokenOptions);
+        res.cookie("refreshToken", refreshToken, refreshTokenOptions);
+
+        const safeUser = {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+        };
+
+        return res.status(200).json({
+            success: true,
+            user: safeUser,
+            accessToken,
+            tokenMessage
+        });
 
 
     } catch (error: any) {
@@ -231,3 +233,119 @@ export const updateRefreshToken = CatchAsyncErrors(async (req: Request, res: Res
 })
 
 //Get user info
+
+export const getUserInfo = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userId = req.user?._id;
+        getUserById(userId?.toString() as string, res);
+
+    } catch (error: any) {
+        return next(new ErrorHandler(error.message, 400));
+    }
+})
+
+//social auth
+
+interface ISocialAuthRequest {
+    name: string;
+    email: string;
+    password: string;
+    avatar?: string;
+}
+export const socialAuth = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { name, email, avatar } = req.body as ISocialAuthRequest;
+
+        let user = await userModel.findOne({ email });
+
+        if (!user) {
+            const newUser = await userModel.create({ email, name, avatar });
+            sendToken(newUser, 200, res);
+        } else {
+            sendToken(user, 200, res);
+        }
+    } catch (error: any) {
+        return next(new ErrorHandler(error.message, 400));
+    }
+})
+
+// update user info
+interface IUpdateUserInfo {
+    name?: string;
+    email?: string;
+    avatar?: {
+        public_id: string,
+        url: string
+    }
+}
+
+export const updateUserInfo = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { name, email, avatar } = req.body as IUpdateUserInfo;
+        const userId = req.user?._id?.toString();
+        if (!userId) {
+            return next(new ErrorHandler("User not authenticated", 401));
+        }
+        const user = await userModel.findById(userId);
+        if (!user) {
+            return next(new ErrorHandler("User not found", 404));
+        }
+        if (email && user) {
+            const emailExists = await userModel.findOne({ email, _id: { $ne: userId } });
+            if (emailExists) {
+                return next(new ErrorHandler("Email already in use", 400));
+            }
+            user.email = email;
+
+        }
+        if (name && user) {
+            user.name = name;
+        }
+        await user?.save();
+        await redis.set(`user:${userId}`, JSON.stringify(user), 'EX', 60 * 60 * 24);
+
+        res.status(200).json({
+            success: true,
+            message: "User info updated successfully",
+            user
+        });
+
+    } catch (error: any) {
+        return next(new ErrorHandler(error.message, 400));
+    }
+})
+
+//updates the password
+interface IUpdateUserPassword {
+    oldPassword: string;
+    newPassword: string;
+}
+
+export const updateUserPassword = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { oldPassword, newPassword } = req.body as IUpdateUserPassword
+        ;
+        if (!oldPassword || !newPassword) {
+            return next(new ErrorHandler("Please provide old and new password", 400));
+        }
+        const user = await userModel.findById(req.user?._id).select("+password");
+
+        if(user?.password === undefined){
+            return next(new ErrorHandler("Invalid  user", 400));
+        }
+        const doesOldPasswordsMatch = await user?.comparePassword(oldPassword);
+        if(!doesOldPasswordsMatch) {
+            return next(new ErrorHandler("Old password is incorrect", 400));
+        }
+        user.password = newPassword;
+        await user.save();
+
+        res.status(200).json({
+            success: true,
+            message: "Password updated successfully"
+        });
+
+    } catch (error: any) {
+        return next(new ErrorHandler(error.message, 400));
+    }
+})
