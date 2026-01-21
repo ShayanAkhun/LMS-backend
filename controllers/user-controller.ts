@@ -1,6 +1,7 @@
 require("dotenv").config();
 import ErrorHandler from "../utils/ErrorHandler";
 import { Response, Request, NextFunction } from "express";
+import cloudinary from "cloudinary";
 import userModel, { IUser } from "../models/user.model";
 import { CatchAsyncErrors } from "../middleware/CatchAsyncErrors";
 import jwt, { Secret, JwtPayload } from "jsonwebtoken";
@@ -10,6 +11,7 @@ import sendMail from "../utils/sendMail";
 import { accessTokenOptions, refreshTokenOptions, sendToken } from "../utils/jwt";
 import { redis } from "../utils/redis";
 import { getUserById } from "../services/user.service";
+import { cacheUser } from "../utils/cacheUsers";
 
 
 interface IRegisterBody {
@@ -302,12 +304,12 @@ export const updateUserInfo = CatchAsyncErrors(async (req: Request, res: Respons
             user.name = name;
         }
         await user?.save();
-        await redis.set(`user:${userId}`, JSON.stringify(user), 'EX', 60 * 60 * 24);
+        const safeUser = await cacheUser(user);
 
         res.status(200).json({
             success: true,
             message: "User info updated successfully",
-            user
+            user: safeUser
         });
 
     } catch (error: any) {
@@ -324,17 +326,17 @@ interface IUpdateUserPassword {
 export const updateUserPassword = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { oldPassword, newPassword } = req.body as IUpdateUserPassword
-        ;
+            ;
         if (!oldPassword || !newPassword) {
             return next(new ErrorHandler("Please provide old and new password", 400));
         }
         const user = await userModel.findById(req.user?._id).select("+password");
 
-        if(user?.password === undefined){
+        if (user?.password === undefined) {
             return next(new ErrorHandler("Invalid  user", 400));
         }
         const doesOldPasswordsMatch = await user?.comparePassword(oldPassword);
-        if(!doesOldPasswordsMatch) {
+        if (!doesOldPasswordsMatch) {
             return next(new ErrorHandler("Old password is incorrect", 400));
         }
         user.password = newPassword;
@@ -344,6 +346,59 @@ export const updateUserPassword = CatchAsyncErrors(async (req: Request, res: Res
             success: true,
             message: "Password updated successfully"
         });
+
+    } catch (error: any) {
+        return next(new ErrorHandler(error.message, 400));
+    }
+})
+
+//updates the profile photo
+
+interface IUpdateProfilePhoto {
+    avatar: string
+}
+export const updateProfilePhoto = CatchAsyncErrors(async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { avatar } = req.body as IUpdateProfilePhoto;
+
+        const userId = req.user?._id;
+
+        const user = await userModel.findById(userId);
+
+        if (avatar && user) {
+            if (user?.avatar?.public_id) {
+                await cloudinary.v2.uploader.destroy(user.avatar.public_id);
+                const myCloud = await cloudinary.v2.uploader.upload(avatar, {
+                    width: 150,
+                    crop: "scale"
+                })
+                user.avatar = {
+                    public_id: myCloud.public_id,
+                    url: myCloud.secure_url
+                }
+            } else {
+                const myCloud = await cloudinary.v2.uploader.upload(avatar, {
+                    width: 150,
+                    crop: "scale"
+                })
+                user.avatar = {
+                    public_id: myCloud.public_id,
+                    url: myCloud.secure_url
+                }
+            }
+        }
+        if (!user) {
+            return next(new ErrorHandler("User not found", 404));
+        }
+
+        await user?.save();
+        const safeUser = await cacheUser(user);
+        res.status(200).json({
+            success: true,
+            message: "Profile photo updated successfully",
+            user: safeUser,
+        });
+
 
     } catch (error: any) {
         return next(new ErrorHandler(error.message, 400));
