@@ -37,7 +37,7 @@ interface ICourse extends Document {
     description: string;
     price: number;
     estimatePrice?: number;
-    thumbnail: object;
+    thumbnail: string;
     tags: string;
     demoUrl: string;
     level: string;
@@ -133,6 +133,6 @@ const courseSchema = new Schema<ICourse>({
     }
 })
 
-const CourseModel : Model<ICourse> = mongoose.model<ICourse>("Course", courseSchema);
+const CourseModel: Model<ICourse> = mongoose.model<ICourse>("Course", courseSchema);
 
 export { CourseModel, ICourse, IReview, IComment, ICourseData };
