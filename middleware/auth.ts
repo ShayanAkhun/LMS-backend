@@ -7,8 +7,7 @@ import { redis } from "../utils/redis";
 export const isAuthenticated = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const accessToken = req.cookies.accessToken;
-        console.log("Access Token:", accessToken);
-        console.log("ACCESS_TOKEN env:", process.env.ACCESS_TOKEN);
+
 
         if (!accessToken) {
             return next(new ErrorHandler("Invalid Token. Please login again", 400));
